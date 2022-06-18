@@ -1,0 +1,93 @@
+---
+title: "lab6"
+author: "Tsvetkov Alex"
+date: "29.11.2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Подготовительные действия
+
+```{r}
+library(kableExtra)
+library(dplyr)
+library(ggcorrplot)
+library(lavaan)
+library(lavaanPlot)
+
+path <- "C:\\R\\lab6\\nut_dataframe.csv"
+
+dtframe <- read.csv(path, fileEncoding = "UTF-8", stringsAsFactors = FALSE)
+dtframe <- na.omit(dtframe[, -1])
+
+```
+
+## Задание лабораторной работы №6
+**Для данных нута построить модель SEM 8ми наблюдаемых и 3х латентных переменных. В качестве наблюдаемых переменных использовать:
+PodWidth, PodLength, SeedsWeight, SeedsNumber, PodsNumber, PodsWeight, BegFEndF, EndFBegM.**  
+
+Выберем нужные данные из исходного `dataframe`:
+```{r}
+df_tibble <- as_tibble(dtframe)
+
+df_tibble <- df_tibble %>% select(PodWidth, 
+                                  PodLength, 
+                                  SeedsWeight, 
+                                  SeedsNumber, 
+                                  PodsNumber, 
+                                  PodsWeight, 
+                                  BegFEndF, 
+                                  EndFBegM)
+df <- as.data.frame(df_tibble)
+kable(df) %>%
+  kable_styling("striped", full_width = F) %>%
+  scroll_box(width = "100%", height = "400px")
+```
+**Найти оптимальные значения параметров с помощью пакета lavaan.**  
+Будем строить модель по значениям корреляции с главными компонентами метода PCA.
+```{r}
+# находим значения главных компонент
+pca_df <- prcomp(df, scale = T, center = T)$x
+#получаем матрицу корреляций
+correlation <- cor(df, pca_df)
+kable(correlation) %>%
+  kable_styling("striped")
+```
+Отобразим полученную матрицу корреляций наглядно на рисунке:
+```{r}
+ggcorrplot(cor(pca_df, df))
+```
+
+Видим, что наибольший вклад вносят первые три главные компоненты. Их и будем использовать для построения модели. Выберем порог отсечения вклада в `0.5` и выберем элементы с вкладом, удовлетворяющим этому условию (`0` - не подходит, `1` - подходит):
+```{r}
+# отсечем только первые три главные компоненты
+three_corr <- correlation[, 1:3]
+dependence <- three_corr
+# заменим значения на 0 и 1
+dependence[abs(dependence) <= 0.5] <- F
+dependence[abs(dependence) > 0.5] <- T
+print(dependence)
+```
+Итак, по выводам из данной таблицы можем составить модель SEM:
+```{r}
+model <- '
+# measurement model
+PC1 =~ SeedsWeight + SeedsNumber + PodsNumber + PodsWeight
+PC2 =~ PodWidth + PodLength
+PC3 =~ BegFEndF + EndFBegM'
+```
+Применим метод SEM для такой модели.
+```{r}
+fit <- sem(model, data = df)
+summary(fit, standardized=TRUE)
+```
+В столбце `Estimate` можем видеть оптимальные значения весов для данной модели.  
+**Изобразить получившуюся модель графически.**
+```{r}
+lavaanPlot(model = fit, 
+           node_options = list(shape = "box", fontname = "Helvetica"),
+           edge_options = list(color = "grey"), coefs = TRUE, covs = TRUE, stars = TRUE)
+```

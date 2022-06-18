@@ -1,0 +1,44 @@
+---
+title: "lab3"
+author: "Tsvetkov Alex"
+date: "22/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Подготовительные действия
+
+
+```{r}
+filepath <- "C:\\R\\lab3\\sales.csv"
+
+require(ggplot2)
+
+file <- read.csv(filepath, fileEncoding = "UTF-8")
+
+pos <- position_dodge(0.25)
+```
+
+## Задание №1
+
+
+```{r}
+ggplot(file, aes(income, sale)) + geom_point(aes(colour = shop), size = 3) + geom_smooth(method = lm)
+```
+
+## Задание №2
+
+
+```{r}
+ggplot(file, aes(shop, income, colour = season)) + stat_summary(size = 0.8, position = pos)
+```
+
+## Задание №3
+
+
+```{r}
+ggplot(file, aes(date, sale, colour = shop)) + stat_summary(size = 0.8, position = pos) + stat_summary(size = 0.8, fun = mean, geom = "line", position = pos)
+```

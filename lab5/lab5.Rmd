@@ -1,0 +1,171 @@
+---
+title: "lab5"
+author: "Tsvetkov Alex"
+date: "22.11.2020"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+## Подготовительные действия
+```{r}
+library(ggplot2)
+library(factoextra)
+library(dplyr)
+library(resample)
+library(kableExtra)
+library(psych)
+library(gridExtra)
+
+path <- "C:\\R\\lab5\\nut_dataframe.csv"
+
+df <- read.csv(path, fileEncoding = "UTF-8", stringsAsFactors = FALSE)
+df <- na.omit(df[, -1])
+```
+Подготовленный dataframe:
+```{r}
+kable(df) %>%
+  kable_styling("striped", full_width = F) %>%
+  scroll_box(width = "100%", height = "400px")
+```
+## Задание лабораторной №5
+**Перевести данные нута в пространство главных компонент. **  
+**Реализовать с помощью встроенных функций: **  
+Вначале рассмотрим матрицу ковариаций исходных переменных:
+```{r}
+kable(cov(df)) %>%
+  kable_styling("striped", full_width = F) %>%
+  scroll_box(width = "100%", height = "400px")
+```
+Применим метод главных компонент (с параметрами центрирования и нормирования):
+```{r}
+df_pca <- prcomp(df, scale = T, center = T)
+```
+Получившаяся матрица главных компонент:
+```{r}
+kable(df_pca$x) %>%
+  kable_styling("striped", full_width = F) %>%
+  scroll_box(width = "100%", height = "400px")
+```
+Вклад дисперсии для каждой компоненты:
+```{r}
+dispersion <- summary(df_pca)$importance[2, ]
+print(dispersion)
+```
+Матрица вращения (весов):
+```{r}
+kable(df_pca$rotation) %>%
+  kable_styling("striped", full_width = F) %>%
+  scroll_box(width = "100%", height = "400px")
+```
+**Реализовать вручную:**
+```{r}
+mu <- colMeans(as.matrix(df)) # находим мат.ожидания для каждого признака
+d <- colVars(df) # находим дисперсии для каждого признака
+
+# подготавливаем данные для расчетов
+
+df_matr <- as.matrix(df) 
+centered <- matrix(, nrow = nrow(df_matr), ncol = ncol(df_matr))
+
+# центрируем и нормируем матрицу
+for(j in 1:ncol(df)) centered[,j] <- (df_matr[,j] - mu[j])/sqrt(d[j])
+```
+Найдем матрицу ковариаций:
+```{r}
+covariation <- cov(centered)
+colnames(covariation) <- colnames(cov(df))
+rownames(covariation) <- rownames(cov(df))
+kable(covariation) %>%
+  kable_styling("striped", full_width = F) %>%
+  scroll_box(width = "100%", height = "400px")
+```
+Найдем собственные числа и собственные векторы, а с их помощью - матрицу весов:
+```{r}
+# собственные векторы и собственные числа
+eig <- eigen(covariation)
+#Матрица поворота (весов)
+weight <- rbind(-eig$vectors, eig$values)[, order(-eig$values)]
+# матрица собственных векторов
+e1 <- weight[1:(nrow(weight)-1),]
+colnames(e1) <- colnames(df_pca$rotation)
+rownames(e1) <- rownames(df_pca$rotation)
+kable(e1) %>%
+  kable_styling("striped", full_width = F) %>%
+  scroll_box(width = "100%", height = "400px")
+```
+С помощью матрицы весов найдем матрицу главных компонент:
+```{r}
+# матрица РСА
+matr_pca <- centered %*% e1
+colnames(matr_pca) <- colnames(df_pca$x)
+kable(matr_pca) %>%
+  kable_styling("striped", full_width = F) %>%
+  scroll_box(width = "100%", height = "400px")
+```
+Найдем также вклад дисперсии для каждой компоненты:
+```{r}
+# вклад дисперсии
+v1 <- weight[(nrow(weight)),]
+disp <- v1 / tr(covariation)
+disp <- setNames(disp, colnames(matr_pca))
+print(disp)
+```
+Видим, что данные, полученные с помощью встроенной функции и вручную, совпадают.  
+**Сократить пространство координат так, чтобы сохранить 75% дисперсии данных.**
+```{r}
+# данные для отрисовки
+histogram <- as.numeric(formatC(cumsum(dispersion), format = 'f', digits = 3))
+# обрезаем по условию сохранения 75% дисперсии
+pca_cut <- as.data.frame(df_pca$x[, 1:(length(histogram[histogram < 0.75]) + 1)])
+kable(pca_cut) %>%
+  kable_styling("striped", full_width = F) %>%
+  scroll_box(width = "100%", height = "400px")
+```
+Итак, мы сократили пространство главных компонент так, чтобы вклад дисперсий (в процентах) был следующий:
+```{r}
+histogram[length(histogram[histogram < 0.75]) + 1] * 100
+```
+**Построить график доли объясненной дисперсии. Отобразить на графике порог отсечения. **
+```{r}
+myplot <- barplot(histogram, xlim = c(0, 1.1), border = NA, ylab = "Главные компоненты", main = "Cуммирование вклада дисперсий", horiz = T)
+text(y = myplot, x = histogram, label = histogram,  col = "darkgreen", pos = 2, offset = 0, cex = 0.7)
+text(y = myplot, x = 0, cex = 0.7, pos = 2, offset = -1)
+abline(v = 0.75, col = "red", lty = 2)
+text(0.75, 0, "75%", pos=4, col = "red")
+```
+
+**Показать, какие признаки вносят наибольший вклад в те первые главные компоненты, которые описывают 75% дисперсии данных. **  
+В нашем случае 77.8% вклада дают первые 11 компонент:  
+```{r}
+fviz_contrib(df_pca, choice = "var", axes = 1)
+fviz_contrib(df_pca, choice = "var", axes = 2)
+fviz_contrib(df_pca, choice = "var", axes = 3)
+fviz_contrib(df_pca, choice = "var", axes = 4)
+fviz_contrib(df_pca, choice = "var", axes = 5)
+fviz_contrib(df_pca, choice = "var", axes = 6)
+fviz_contrib(df_pca, choice = "var", axes = 7)
+fviz_contrib(df_pca, choice = "var", axes = 8)
+fviz_contrib(df_pca, choice = "var", axes = 9)
+fviz_contrib(df_pca, choice = "var", axes = 10)
+fviz_contrib(df_pca, choice = "var", axes = 11)
+```
+
+**Отобразить данные на плоскости первых 2х главных компонент. Обозначить цветом значения качественного признака, который входит в первую главную компоненту с наибольшим весом. **
+
+Вручную отсортируем веса для первой главной компоненты:
+
+```{r}
+sort(abs(df_pca$rotation[,1]), decreasing = T)
+```
+
+Видим, что наибольший вклад из качественных признаков вносит FloCol.  
+Отобразим эти данные на плоскости первых двух главных компонент:
+
+```{r}
+ggplot(pca_cut, aes(x=PC1, y=PC2, color = abs(df$FloCol))) + 
+  geom_point(size = 2) + 
+  scale_color_gradient(low="blue", high="red", name = "FloCol") +
+  labs(x=paste(sep = "", "PC1 (", format(dispersion[1]*100, digits = 4), "%)"),
+       y=paste(sep = "", "PC2 (", format(dispersion[2]*100, digits = 4), "%)"))
+```

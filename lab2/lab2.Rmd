@@ -1,0 +1,120 @@
+---
+title: "Lab2"
+author: "Tsvetkov Alex"
+date: "18/10/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Подготовительные действия
+
+```{r}
+ path_csv <- "C:\\R\\lab2\\test_data_01.csv"
+ path_Rdata <- "C:\\R\\lab2\\all_data.Rdata"
+ load(path_Rdata)
+```
+
+## Задание №1
+
+Файл с данными test_data_01.csv. Мы видим, что в некоторых значениях числовых переменных добавлен пробел между цифрами. В результате R определит такие переменные как строку (или как фактор по умолчанию). Ваша задача написать функцию fix_data, которая получает на вход набор данных, у которого в некоторых значениях числовых переменных добавлен пробел между цифрами. Ваша задача - избавиться от этого пробела и вернуть числовым переменным их числовой тип. Функция должна возвращать преобразованный набор данных, в котором все числовые переменные будут переведены в числовой тип, при этом те переменные, которые действительно являются строковыми (например, V2 и V4) никак преобразовывать не надо.
+
+```{r}
+require(data.table)
+require(stringr)
+require(dplyr)
+
+# проверяем допустимые ли символы
+
+numbers_only <- function(x) return(grepl("^[ \\.[:digit:] \\-]*$", x))
+
+# проверяем, одна ли точка
+
+correct_number <- function(x) return(str_count(x, "\\.") <= 1)
+
+# функция для замены на числа
+
+edit_data <- function(x) 
+{
+  if((correct_number(x) & numbers_only(x))[1]) x <- as.numeric(str_replace_all(x, fixed(" "), ""))
+  return(x)
+}
+
+fix_data <- function(frame) return(as_tibble(lapply(frame, edit_data)))
+
+# считываем файл так, потому что он битый
+
+table <- fread(text = gsub('"', "", readLines(path_csv), fixed = TRUE))
+table <- as_tibble(table)
+
+fixed <- fix_data(table)
+print(fixed)
+```
+
+## Задание №2
+
+Файл с данными all_data.Rdata. Допустим, в рамках некоторого медицинского исследования тестировалась эффективность новой вакцины от вируса гриппа. Одной из целей исследования являлось изучить динамику температуры тела пациентов на протяжении недели после вакцинации.
+Пациенты должны были каждый день приходить на осмотр, где у них измеряли температуру. Каждый из семи дней экспериментатор вносил в таблицу id пациента и его температуру. После окончания исследования выяснилось, что некоторые пациенты не смогли посетить все семь приемов. Кто-то после первого раза больше не приходил на обследование, кто-то пропустил некоторые дни и т.д. 
+Для чистоты исследования врачам необходимо отобрать из всех пациентов только тех, кто посетили каждый из семи приемов.
+Все данные хранятся в следующем формате: в списке all_data сохранены семь датафреймов, с двумя колонками:  
+1)  id - закодированное имя пациента   
+2)  temp - значения температуры.   
+Ваша задача написать функцию get_id, которая получает на вход такого рода список, состоящий из семи датафрэймов. Функция, должна вернуть новый датафрэйм, в котором будут две переменные id и mean_temp - среднее значение температуры за неделю только тех пациентов, которые посетили все семь приемов, то есть id таких пациентов присутствует в каждом из семи датафреймов.
+
+
+```{r}
+# получаем названия всех пациентов
+
+get_all_ids <- function(data)
+{
+  ids <- vector()
+  for (i in 1:length(data)) ids <- union(ids, data[[i]]$id)
+  return(sort(ids))
+}
+
+# получаем только те id, которые встречаются везде
+
+good_ids <- function(data, ids)
+{
+  bad_ids <- vector()
+  for(i in 1:length(data)) bad_ids <- append(bad_ids, setdiff(ids, data[[i]]$id))
+  return(sort(setdiff(ids, bad_ids)))
+}
+
+get_id <- function(data)
+{
+  ids <- get_all_ids(data)
+  id <- good_ids(data, ids)
+  
+  # создаем data.frame для ответа
+  
+  new_frame <- data.frame(matrix(ncol = 1, nrow = length(id)))
+  colnames(new_frame) <- c("mean_temp")
+  rownames(new_frame) <- id
+  new_frame <- cbind(id, new_frame)
+
+  # оставляем только те данные, которые валидны по id
+  
+  for(i in 1:length(data)) {
+    data[[i]] <- as.data.frame(data[[i]][data[[i]]$id %in% id, ])
+    row.names(data[[i]]) <- data[[i]]$id
+  }
+  
+  # считаем и записываем среднее арифметическое
+  
+  for(i in id)
+  {
+    temp <- vector()
+    for(j in 1:length(data)) temp <- append(temp, data[[j]][toString(i), "temp"])
+    new_frame[toString(i), "mean_temp"] <- mean(temp)
+  }
+  return(new_frame)
+}
+
+frame <- get_id(all_data)
+print(frame)
+```
+
+
